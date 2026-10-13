@@ -1,0 +1,29 @@
+﻿# Gradle
+.gradle/
+build/
+*/build/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+local.properties
+
+# Build outputs
+*.apk
+*.aab
+*.ap_
+output-metadata.json
+release/
+
+# Kotlin
+.kotlin/
+
+# Keystore & secrets
+*.jks
+*.keystore
+key.properties
+
+# System
+.DS_Store
+Thumbs.db
+*.log

@@ -1,0 +1,99 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="stylesheet" href="../leaflet/leaflet.css" />
+<style>
+  html, body, #map { height: 100%; margin: 0; padding: 0; background: #EDE9E0; }
+  .emoji-marker {
+    font-size: 26px;
+    line-height: 1;
+    text-align: center;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.35));
+  }
+  .leaflet-container { font-family: sans-serif; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script src="../leaflet/leaflet.js"></script>
+<script>
+  var map = L.map('map', { zoomControl: false, attributionControl: false })
+             .setView([-25.7479, 28.2293], 11);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    tileSize: 256
+  }).addTo(map);
+
+  var markerStore = {};
+  var polylineLayer = null;
+  var firstUpdate = true;
+
+  function makeIcon(emoji) {
+    return L.divIcon({
+      html: '<div class="emoji-marker">' + emoji + '</div>',
+      className: '',
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
+    });
+  }
+
+  window.updateMarkers = function (json) {
+    var data = JSON.parse(json);
+    var seen = {};
+    data.forEach(function (m) {
+      seen[m.id] = true;
+      var icon = makeIcon(m.emoji || '?');
+      if (markerStore[m.id]) {
+        markerStore[m.id].setLatLng([m.lat, m.lng]).setIcon(icon);
+      } else {
+        markerStore[m.id] = L.marker([m.lat, m.lng], { icon: icon }).addTo(map);
+      }
+    });
+    Object.keys(markerStore).forEach(function (id) {
+      if (!seen[id]) {
+        map.removeLayer(markerStore[id]);
+        delete markerStore[id];
+      }
+    });
+    if (firstUpdate && data.length > 0) {
+      fitAll(data);
+      firstUpdate = false;
+    } else {
+      var me = data.find(function (m) { return m.id === 'me'; });
+      if (me && map.getZoom() >= 13) {
+        map.panTo([me.lat, me.lng], { animate: true, duration: 0.5 });
+      }
+    }
+  };
+
+  function fitAll(data) {
+    if (data.length === 1) {
+      map.setView([data[0].lat, data[0].lng], 15);
+      return;
+    }
+    var bounds = L.latLngBounds(data.map(function (m) { return [m.lat, m.lng]; }));
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+  }
+
+  window.updatePolyline = function (json) {
+    var points = JSON.parse(json);
+    if (polylineLayer) {
+      map.removeLayer(polylineLayer);
+      polylineLayer = null;
+    }
+    if (points.length < 2) return;
+    polylineLayer = L.polyline(points, {
+      color: '#6FA85C',
+      weight: 4,
+      opacity: 0.85,
+      dashArray: '6 6'
+    }).addTo(map);
+  };
+
+  window.setZoom = function (z) { map.setZoom(z); };
+</script>
+</body>
+</html>

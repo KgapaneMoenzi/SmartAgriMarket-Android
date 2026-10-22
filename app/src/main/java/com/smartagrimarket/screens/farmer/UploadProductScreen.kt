@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.smartagrimarket.model.ProductCategory
 import com.smartagrimarket.model.network.ApiResult
+import com.smartagrimarket.model.network.FarmerRepository
 import com.smartagrimarket.model.network.TokenStore
 import com.smartagrimarket.model.network.UploadRepository
 import com.smartagrimarket.ui.theme.*
@@ -50,8 +52,43 @@ fun UploadProductScreen(
     var isUploadingImage by remember { mutableStateOf(false) }
     var imageError by remember { mutableStateOf<String?>(null) }
 
+    // ── BUTCHER STATE ──
+    var isButcherVerified by remember { mutableStateOf(false) }
+    var isUploadingCert by remember { mutableStateOf(false) }
+    var certMessage by remember { mutableStateOf<String?>(null) }
+
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    // Check if the farmer is already verified on load
+    LaunchedEffect(Unit) {
+        when (val result = FarmerRepository.getButcherStatus()) {
+            is ApiResult.Success -> isButcherVerified = result.data
+            is ApiResult.Error -> {}
+        }
+    }
+
+    // Certificate Picker
+    val pickCertLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            isUploadingCert = true
+            certMessage = null
+            scope.launch {
+                when (val result = FarmerRepository.uploadButcherCertificate(context, uri)) {
+                    is ApiResult.Success -> {
+                        certMessage = "Certificate uploaded! Pending admin approval."
+                        isUploadingCert = false
+                    }
+                    is ApiResult.Error -> {
+                        certMessage = result.message
+                        isUploadingCert = false
+                    }
+                }
+            }
+        }
+    }
 
     val pickImageLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -86,14 +123,15 @@ fun UploadProductScreen(
 
     val isValid = name.isNotBlank() &&
             priceValue != null && priceValue > 0 &&
-            stockValue != null && stockValue > 0
+            stockValue != null && stockValue > 0 &&
+            (category != ProductCategory.MEAT || isButcherVerified)
 
-    // Figure out which field to flag when the user taps Upload too early.
     val validationMessage: String? = when {
         !showValidationError || isValid -> null
         name.isBlank() -> "Add a product name."
         priceValue == null || priceValue <= 0 -> "Enter a price greater than 0."
         stockValue == null || stockValue <= 0 -> "Enter a stock quantity of at least 1."
+        category == ProductCategory.MEAT && !isButcherVerified -> "You need a verified Meat Safety Certificate to sell meat."
         else -> "Please fill in all fields."
     }
 
@@ -220,6 +258,60 @@ fun UploadProductScreen(
                             color = AgriTextPrimary
                         )
                     }
+                }
+            }
+
+            // ── BUTCHER CERTIFICATE CARD ──
+            if (category == ProductCategory.MEAT && !isButcherVerified) {
+                Spacer(Modifier.height(16.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = AgriRedAlert.copy(alpha = 0.1f)),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "⚠️ Meat Safety Certificate Required",
+                            fontWeight = FontWeight.Bold,
+                            color = AgriRedAlert,
+                            fontSize = 14.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "To sell meat on SmartAgriMarket, you must upload a clear picture of your Meat Safety Certificate. An admin will verify it.",
+                            fontSize = 12.sp,
+                            color = AgriTextPrimary
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            // FIXED: Changed from application/pdf to image/*
+                            onClick = { pickCertLauncher.launch("image/*") },
+                            enabled = !isUploadingCert,
+                            colors = ButtonDefaults.buttonColors(containerColor = AgriRedAlert),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (isUploadingCert) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text("Upload Certificate Photo", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        certMessage?.let {
+                            Spacer(Modifier.height(8.dp))
+                            Text(it, color = AgriGreenDark, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            if (category == ProductCategory.MEAT && isButcherVerified) {
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("✅ Verified Butcher", color = AgriGreenDark, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
 
@@ -365,8 +457,7 @@ fun UploadProductScreen(
 }
 
 // ─────────────────────────────────────────────────────────────
-// Photo picker — empty state is a dashed-feel tile that invites
-// a tap; filled state shows the image with a "Change photo" action.
+// Photo picker
 // ─────────────────────────────────────────────────────────────
 @Composable
 private fun PhotoPicker(
@@ -378,7 +469,6 @@ private fun PhotoPicker(
     val preview: Any? = imageUrl ?: imageUri
 
     if (preview == null) {
-        // Empty state — tap to pick
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -412,7 +502,6 @@ private fun PhotoPicker(
             )
         }
     } else {
-        // Filled state — preview + change action
         Column(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier

@@ -25,7 +25,9 @@ import com.smartagrimarket.model.network.DriverRepository
 import com.smartagrimarket.model.network.DriverWalletDto
 import com.smartagrimarket.model.network.DriverWithdrawalDto
 import com.smartagrimarket.ui.theme.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 @Composable
 fun DriverWalletScreen(
@@ -38,6 +40,7 @@ fun DriverWalletScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
     var showWithdrawDialog by remember { mutableStateOf(false) }
+    var isWithdrawing by remember { mutableStateOf(false) }
 
     suspend fun refresh() {
         loading = true
@@ -50,6 +53,19 @@ fun DriverWalletScreen(
     }
 
     LaunchedEffect(Unit) { refresh() }
+
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) {
+            delay(5000)
+            errorMessage = null
+        }
+    }
+    LaunchedEffect(successMessage) {
+        if (successMessage != null) {
+            delay(5000)
+            successMessage = null
+        }
+    }
 
     Scaffold(containerColor = AgriCreamBg) { padding ->
         Column(
@@ -126,7 +142,7 @@ fun DriverWalletScreen(
                         }
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            "R ${String.format("%.2f", balance)}",
+                            "R ${String.format(Locale.US, "%.2f", balance)}",
                             color = Color.White,
                             fontSize = 36.sp,
                             fontWeight = FontWeight.Bold
@@ -155,6 +171,49 @@ fun DriverWalletScreen(
                 }
 
                 Spacer(Modifier.height(16.dp))
+
+                // ── Banners ──
+                successMessage?.let { msg ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(AgriGreen.copy(alpha = 0.15f))
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("✅", fontSize = 16.sp)
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            msg,
+                            color = AgriGreenDark,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(Modifier.height(16.dp))
+                }
+
+                errorMessage?.let { msg ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(AgriRedAlert.copy(alpha = 0.12f))
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("⚠️", fontSize = 16.sp)
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            msg,
+                            color = AgriRedAlert,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(Modifier.height(16.dp))
+                }
 
                 // ── In-flight earnings ──
                 val pending = wallet?.pending ?: 0.0
@@ -200,7 +259,7 @@ fun DriverWalletScreen(
                                 )
                             }
                             Text(
-                                "R ${String.format("%.2f", pending)}",
+                                "R ${String.format(Locale.US, "%.2f", pending)}",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
                                 color = AgriGreenDark
@@ -271,61 +330,42 @@ fun DriverWalletScreen(
                     }
                 }
 
-                successMessage?.let {
-                    Spacer(Modifier.height(14.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(AgriMintLight)
-                            .padding(14.dp)
-                    ) {
-                        Text(
-                            it,
-                            color = AgriGreenDark,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-
-                errorMessage?.let {
-                    Spacer(Modifier.height(14.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(AgriRedAlert.copy(alpha = 0.12f))
-                            .padding(14.dp)
-                    ) {
-                        Text(it, color = AgriRedAlert, fontSize = 13.sp)
-                    }
-                }
-
                 Spacer(Modifier.height(24.dp))
             }
         }
     }
 
     if (showWithdrawDialog) {
-        WithdrawDialog(
-            balance = wallet?.balance ?: 0.0,
-            onDismiss = { showWithdrawDialog = false },
-            onSubmit = { amount ->
-                showWithdrawDialog = false
+        WithdrawBottomSheet(
+            availableBalance = wallet?.balance ?: 0.0,
+            pendingBalance = wallet?.pending ?: 0.0,
+            isSubmitting = isWithdrawing,
+            onDismiss = {
+                if (!isWithdrawing) showWithdrawDialog = false
+            },
+            onSubmit = { amount, method, details ->
+                if (isWithdrawing) return@WithdrawBottomSheet
+                isWithdrawing = true
                 scope.launch {
-                    errorMessage = null
-                    successMessage = null
-                    when (val result = DriverRepository.requestWithdrawal(amount)) {
+                    val result = DriverRepository.requestWithdrawal(
+                        amount = amount,
+                        payoutMethod = method,
+                        details = details
+                    )
+
+                    when (result) {
                         is ApiResult.Success -> {
-                            successMessage =
-                                "Withdrawal of R${String.format("%.2f", result.data.withdrawal.amount)} requested. " +
-                                        "R${String.format("%.2f", result.data.withdrawal.netAmount)} will be paid out " +
-                                        "(after 15% platform fee)."
+                            showWithdrawDialog = false
+                            successMessage = "Withdrawal requested! Admin will process it shortly."
                             refresh()
                         }
-                        is ApiResult.Error -> errorMessage = result.message
+                        is ApiResult.Error -> {
+                            showWithdrawDialog = false
+                            errorMessage = result.message
+                            refresh()
+                        }
                     }
+                    isWithdrawing = false
                 }
             }
         )
@@ -346,17 +386,25 @@ private fun WithdrawalRow(w: DriverWithdrawalDto) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "R ${String.format("%.2f", w.amount)}",
+                    "R ${String.format(Locale.US, "%.2f", w.amount)}",
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                     color = AgriTextPrimary
                 )
                 Spacer(Modifier.height(3.dp))
+
+                // Show payout method in the history
+                val methodLabel = when (w.payoutMethod) {
+                    "BANK" -> "Bank Transfer (${w.bankName ?: "Unknown"})"
+                    "EWALLET" -> "E-Wallet"
+                    else -> "Unknown Method"
+                }
                 Text(
-                    "Net R${String.format("%.2f", w.netAmount)} · Fee R${String.format("%.2f", w.platformFee)}",
+                    methodLabel,
                     style = MaterialTheme.typography.bodySmall,
                     color = AgriTextSecondary
                 )
+
                 w.createdAt.takeIf { it.isNotBlank() }?.let {
                     Spacer(Modifier.height(3.dp))
                     Text(
@@ -401,81 +449,250 @@ private fun DriverStatusBadge(status: String) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WithdrawDialog(
-    balance: Double,
+private fun WithdrawBottomSheet(
+    availableBalance: Double,
+    pendingBalance: Double,
+    isSubmitting: Boolean,
     onDismiss: () -> Unit,
-    onSubmit: (Double) -> Unit,
+    onSubmit: (amount: Double, method: String, details: Map<String, String>) -> Unit
 ) {
-    var text by remember { mutableStateOf("") }
-    val amount = text.toDoubleOrNull() ?: 0.0
-    val isValid = amount > 0 && amount <= balance
+    var amountText by remember { mutableStateOf("") }
+    var method by remember { mutableStateOf("EWALLET") }
 
-    AlertDialog(
+    var walletNumber by remember { mutableStateOf("") }
+    var bankName by remember { mutableStateOf("") }
+    var accountNumber by remember { mutableStateOf("") }
+    var accountName by remember { mutableStateOf("") }
+
+    var validationError by remember { mutableStateOf<String?>(null) }
+
+    val amount = amountText.toDoubleOrNull() ?: 0.0
+    // Drivers don't pay the 15% fee
+    val platformFee = 0.0
+    val netAmount = amount - platformFee
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = AgriCardBg,
-        title = { Text("Withdraw funds", fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
+        dragHandle = { BottomSheetDefaults.DragHandle(color = AgriBorderLight) },
+        modifier = Modifier.imePadding()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Text("Withdraw funds", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = AgriTextPrimary)
+
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Available: R ${String.format(Locale.US, "%.2f", availableBalance)}",
+                fontSize = 13.sp,
+                color = AgriTextSecondary
+            )
+            if (pendingBalance > 0) {
                 Text(
-                    "Available: R ${String.format("%.2f", balance)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AgriTextSecondary
+                    "Pending (locked): R ${String.format(Locale.US, "%.2f", pendingBalance)}",
+                    fontSize = 12.sp,
+                    color = Color(0xFF8A6100)
                 )
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { input ->
-                        text = input.filter { it.isDigit() || it == '.' }
-                    },
-                    label = { Text("Amount (R)") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedContainerColor = AgriMintSoft,
-                        focusedContainerColor = AgriMintSoft,
-                        focusedBorderColor = AgriGreen,
-                        cursorColor = AgriGreen
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = amountText,
+                onValueChange = { newValue ->
+                    if (newValue.isEmpty() || newValue.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
+                        amountText = newValue
+                        validationError = null
+                    }
+                },
+                label = { Text("Amount (R)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true,
+                enabled = !isSubmitting,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (amount > availableBalance) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Amount exceeds your available balance.",
+                    color = AgriRedAlert,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(Modifier.height(20.dp))
+            Text("Payout Method", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AgriTextPrimary)
+            Spacer(Modifier.height(8.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = { method = "EWALLET" },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (method == "EWALLET") AgriGreen else AgriMintLight,
+                        contentColor = if (method == "EWALLET") Color.White else AgriGreenDark
                     ),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("E-Wallet") }
+
+                Button(
+                    onClick = { method = "BANK" },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (method == "BANK") AgriGreen else AgriMintLight,
+                        contentColor = if (method == "BANK") Color.White else AgriGreenDark
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("Bank Transfer") }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            if (method == "EWALLET") {
+                OutlinedTextField(
+                    value = walletNumber,
+                    onValueChange = { walletNumber = it; validationError = null },
+                    label = { Text("E-Wallet Phone Number") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
-                if (text.isNotBlank() && !isValid) {
+            } else {
+                OutlinedTextField(
+                    value = bankName,
+                    onValueChange = { bankName = it; validationError = null },
+                    label = { Text("Bank Name (e.g. FNB, Capitec)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = accountNumber,
+                    onValueChange = { accountNumber = it; validationError = null },
+                    label = { Text("Account Number") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = accountName,
+                    onValueChange = { accountName = it; validationError = null },
+                    label = { Text("Account Holder Name") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            if (amount > 0) {
+                Spacer(Modifier.height(16.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(AgriCreamBg)
+                        .padding(14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Platform fee", fontSize = 12.sp, color = AgriTextSecondary)
+                        Text(
+                            "R 0.00 (Drivers pay no fee)",
+                            fontSize = 12.sp,
+                            color = AgriGreenDark,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                     Spacer(Modifier.height(6.dp))
-                    Text(
-                        if (amount > balance) "Amount exceeds your balance."
-                        else "Enter a valid amount.",
-                        color = AgriRedAlert,
-                        fontSize = 12.sp
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "You will receive",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AgriTextPrimary
+                        )
+                        Text(
+                            "R ${String.format(Locale.US, "%.2f", netAmount)}",
+                            fontSize = 14.sp,
+                            color = AgriGreenDark,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
-                Spacer(Modifier.height(10.dp))
+            }
+
+            validationError?.let {
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    "A 15% platform fee is deducted from your payout.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AgriTextSecondary
+                    it,
+                    color = AgriRedAlert,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
-        },
-        confirmButton = {
+
+            Spacer(Modifier.height(24.dp))
+
             Button(
-                onClick = { onSubmit(amount) },
-                enabled = isValid,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AgriGreen,
-                    contentColor = Color.White
-                )
+                onClick = {
+                    if (amount <= 0) {
+                        validationError = "Please enter an amount greater than 0."
+                        return@Button
+                    }
+                    if (amount > availableBalance) {
+                        validationError = "Amount exceeds your available balance."
+                        return@Button
+                    }
+                    if (method == "EWALLET" && walletNumber.isBlank()) {
+                        validationError = "Please enter your E-Wallet phone number."
+                        return@Button
+                    }
+                    if (method == "BANK" && (bankName.isBlank() || accountNumber.isBlank() || accountName.isBlank())) {
+                        validationError = "Please fill in all bank details."
+                        return@Button
+                    }
+
+                    val details = if (method == "EWALLET") {
+                        mapOf("walletNumber" to walletNumber)
+                    } else {
+                        mapOf("bankName" to bankName, "accountNumber" to accountNumber, "accountName" to accountName)
+                    }
+                    onSubmit(amount, method, details)
+                },
+                enabled = !isSubmitting,
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AgriGreen),
+                shape = RoundedCornerShape(16.dp)
             ) {
-                Text("Request", fontWeight = FontWeight.Bold)
+                if (isSubmitting) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                } else {
+                    Text("Confirm Withdrawal", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = AgriTextSecondary)
-            }
+
+            Spacer(Modifier.height(32.dp))
         }
-    )
+    }
 }
 
 private fun formatTimestamp(iso: String): String {

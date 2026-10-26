@@ -40,6 +40,8 @@ fun DriverHomeScreen(
     var nextStopName by remember { mutableStateOf<String?>(null) }
     var nextStopKm by remember { mutableStateOf<Double?>(null) }
     var verificationStatus by remember { mutableStateOf("not_submitted") }
+    var hasFridge by remember { mutableStateOf(false) }
+    var isTogglingFridge by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
     var isToggling by remember { mutableStateOf(false) }
     var isStartingBatch by remember { mutableStateOf(false) }
@@ -59,6 +61,7 @@ fun DriverHomeScreen(
                     maxBatch = stats.data.maxBatch
                     verificationStatus = stats.data.verificationStatus
                     batchState = stats.data.batchState
+                    hasFridge = stats.data.hasFridge
                 }
                 is ApiResult.Error -> errorMessage = stats.message
             }
@@ -70,6 +73,7 @@ fun DriverHomeScreen(
                     batchCount = jobs.data.batch.count
                     nextStopName = jobs.data.batch.nextStop?.buyerName
                     nextStopKm = jobs.data.batch.nextStop?.distanceFromHubKm
+                    hasFridge = jobs.data.hasFridge
                 }
                 is ApiResult.Error -> { }
             }
@@ -198,6 +202,73 @@ fun DriverHomeScreen(
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = AgriGreenDark,
                             checkedTrackColor = Color.White
+                        )
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── CANOPY FRIDGE CARD ──
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = AgriCardBg),
+                elevation = CardDefaults.cardElevation(0.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (hasFridge) AgriGreen.copy(alpha = 0.15f)
+                                else AgriMintLight
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🧊", fontSize = 20.sp)
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Canopy fridge",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = AgriTextPrimary
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            if (hasFridge)
+                                "On — meat & poultry deliveries unlocked"
+                            else
+                                "Turn on to unlock meat & poultry deliveries",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (hasFridge) AgriGreenDark else AgriTextSecondary
+                        )
+                    }
+                    Switch(
+                        checked = hasFridge,
+                        enabled = !isTogglingFridge && isVerified,
+                        onCheckedChange = { newValue ->
+                            isTogglingFridge = true
+                            errorMessage = null
+                            scope.launch {
+                                when (val r = DriverRepository.updateVehicleDetails(newValue)) {
+                                    is ApiResult.Success -> hasFridge = r.data
+                                    is ApiResult.Error -> errorMessage = r.message
+                                }
+                                isTogglingFridge = false
+                            }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = AgriGreen
                         )
                     )
                 }

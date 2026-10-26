@@ -9,10 +9,10 @@ import com.smartagrimarket.ui.theme.AgriCardBg
 import com.smartagrimarket.ui.theme.AgriYellow
 
 enum class FarmerTab(val label: String, val emoji: String) {
-    DASHBOARD("Dashboard", "🏠"),
+    HOME("Home", "🏠"),        // Renamed from DASHBOARD to HOME
     ORDERS("Orders", "📦"),
     WEATHER("Weather", "☀️"),
-    STATS("Stats", "📊"),
+    BUSINESS("Business", "📊"), // The new FNB Financial Dashboard
     ACCOUNT("Account", "👤")
 }
 

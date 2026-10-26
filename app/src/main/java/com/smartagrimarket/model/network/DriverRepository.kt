@@ -116,6 +116,29 @@ object DriverRepository {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // CANOPY FRIDGE (COLD-CHAIN)
+    // ─────────────────────────────────────────────────────────────
+
+    suspend fun updateVehicleDetails(hasFridge: Boolean): ApiResult<Boolean> {
+        val token = TokenStore.token ?: return ApiResult.Error("Please sign in again.")
+        return try {
+            val response = api.updateDriverVehicle(
+                "Bearer $token",
+                VehicleUpdateRequest(hasFridge = hasFridge)
+            )
+            val body = response.body()
+            if (response.isSuccessful && body != null) {
+                ApiResult.Success(body.hasFridge)
+            } else {
+                val msg = extractErrorBody(response)
+                ApiResult.Error(msg ?: "Could not update canopy fridge (${response.code()})")
+            }
+        } catch (e: Exception) {
+            ApiResult.Error("Couldn't reach the server. Check your connection.")
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Zones
     // ─────────────────────────────────────────────────────────────
 
@@ -164,9 +187,6 @@ object DriverRepository {
 
     // ─────────────────────────────────────────────────────────────
     // Batch lifecycle — start, collect, deliver
-    //
-    // Each call returns the full updated batch so the UI can
-    // refresh without a second request.
     // ─────────────────────────────────────────────────────────────
 
     suspend fun startBatch(): ApiResult<BatchActionResponse> {
@@ -230,16 +250,31 @@ object DriverRepository {
         }
     }
 
-    suspend fun requestWithdrawal(amount: Double): ApiResult<DriverWithdrawResponse> {
+    // ── UPDATED FOR E-WALLET / BANK ──
+    suspend fun requestWithdrawal(
+        amount: Double,
+        payoutMethod: String,
+        details: Map<String, String>
+    ): ApiResult<DriverWithdrawalDto> {
         val token = TokenStore.token ?: return ApiResult.Error("Please sign in again.")
         return try {
-            val response = api.requestDriverWithdrawal(
-                "Bearer $token",
-                DriverWithdrawRequest(amount = amount)
+            val request = WithdrawRequestDto(
+                amount = amount,
+                payoutMethod = payoutMethod,
+                walletNumber = details["walletNumber"],
+                bankName = details["bankName"],
+                accountNumber = details["accountNumber"],
+                accountName = details["accountName"]
             )
+
+            val response = api.requestDriverWithdrawal("Bearer $token", request)
             val body = response.body()
-            if (response.isSuccessful && body != null) ApiResult.Success(body)
-            else ApiResult.Error("Could not process withdrawal (${response.code()})")
+            if (response.isSuccessful && body != null) {
+                ApiResult.Success(body.withdrawal)
+            } else {
+                val msg = extractErrorBody(response)
+                ApiResult.Error(msg ?: "Could not process withdrawal (${response.code()})")
+            }
         } catch (e: Exception) {
             ApiResult.Error("Couldn't reach the server. Check your connection.")
         }
@@ -349,10 +384,6 @@ object DriverRepository {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // Error body extraction — surfaces backend `error` strings
-    // so the UI can show "You have unfinished deliveries" etc.
-    // ─────────────────────────────────────────────────────────────
     private fun extractErrorBody(response: Response<*>): String? {
         return try {
             val raw = response.errorBody()?.string() ?: return null

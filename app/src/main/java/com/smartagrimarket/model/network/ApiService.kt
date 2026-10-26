@@ -17,11 +17,9 @@ import okhttp3.RequestBody
 
 interface ApiService {
 
-    // ── HEALTH CHECK ──
     @GET("api/health")
     suspend fun healthCheck(): Response<HealthResponse>
 
-    // ── AUTH ──
     @POST("api/auth/signup")
     suspend fun signUp(@Body request: SignUpRequest): Response<SignUpResponse>
 
@@ -100,7 +98,6 @@ interface ApiService {
         @Body request: NotificationSettingsDto
     ): Response<NotificationSettingsDto>
 
-    // ── PAYMENTS ──
     @POST("api/payments/create")
     suspend fun createPayment(@Body request: PaymentCreateRequest): Response<PaymentCreateResponse>
 
@@ -110,7 +107,6 @@ interface ApiService {
         @Body body: DeliveryQuoteRequest
     ): Response<DeliveryQuoteResponse>
 
-    // ── PRODUCTS ──
     @GET("api/products")
     suspend fun getProducts(): Response<ProductListResponse>
 
@@ -154,7 +150,16 @@ interface ApiService {
         @Path("id") id: String
     ): Response<Map<String, Boolean>>
 
-    // ── ORDERS ──
+    @POST("api/products/{id}/quote")
+    suspend fun requestBulkQuote(
+        @Header("Authorization") bearerToken: String,
+        @Path("id") id: String,
+        @Body body: RequestQuoteRequest
+    ): Response<Map<String, Any>>
+
+    @GET("api/products/quotes/mine")
+    suspend fun getMyBulkQuotes(@Header("Authorization") bearerToken: String): Response<FarmerQuotesResponse>
+
     @GET("api/orders")
     suspend fun getOrders(@Header("Authorization") bearerToken: String): Response<OrdersListResponse>
 
@@ -176,7 +181,6 @@ interface ApiService {
         @Path("id") id: String
     ): Response<RouteResponse>
 
-    // ── RECOMMENDATIONS ──
     @GET("api/recommendations")
     suspend fun getRecommendations(
         @Header("Authorization") bearerToken: String
@@ -190,14 +194,14 @@ interface ApiService {
     @GET("api/recommendations/trending")
     suspend fun getTrendingProducts(): Response<RecommendationsResponse>
 
-    // ── WEATHER ──
     @GET("api/weather/advice")
     suspend fun getWeatherAdvice(
         @Header("Authorization") bearerToken: String,
-        @Query("location") location: String
+        @Query("location") location: String? = null,
+        @Query("lat") lat: Double? = null,
+        @Query("lon") lon: Double? = null
     ): Response<FarmerWeatherAdvice>
 
-    // ── FARMER ──
     @GET("api/farmer/stats")
     suspend fun getFarmerStats(
         @Header("Authorization") bearerToken: String
@@ -237,7 +241,23 @@ interface ApiService {
         @Path("crop") crop: String
     ): Response<Map<String, Boolean>>
 
-    // ── REVIEWS / Q&A ──
+    @GET("api/farmer/business-dashboard")
+    suspend fun getBusinessDashboard(
+        @Header("Authorization") bearerToken: String
+    ): Response<BusinessDashboardDto>
+
+    @GET("api/farmer/quotes")
+    suspend fun getFarmerQuotes(
+        @Header("Authorization") bearerToken: String
+    ): Response<FarmerQuotesResponse>
+
+    @POST("api/farmer/quotes/{id}/reply")
+    suspend fun replyToBulkQuote(
+        @Header("Authorization") bearerToken: String,
+        @Path("id") id: String,
+        @Body body: ReplyQuoteRequest
+    ): Response<Map<String, Any>>
+
     @GET("api/products/{productId}/reviews")
     suspend fun getProductReviews(
         @Path("productId") productId: String
@@ -268,7 +288,6 @@ interface ApiService {
         @Body request: CreateQuestionRequest
     ): Response<CreateQuestionResponse>
 
-    // ── NOTIFICATIONS ──
     @GET("api/notifications")
     suspend fun getNotifications(
         @Header("Authorization") bearerToken: String
@@ -290,7 +309,6 @@ interface ApiService {
         @Header("Authorization") bearerToken: String
     ): Response<Map<String, String>>
 
-    // ── DELIVERY SLOTS ──
     @GET("api/delivery-slots/{orderId}")
     suspend fun getDeliverySlots(
         @Header("Authorization") bearerToken: String,
@@ -304,7 +322,6 @@ interface ApiService {
         @Body body: SelectSlotRequest
     ): Response<SelectSlotResponse>
 
-    // ── BACK IN STOCK ──
     @POST("api/back-in-stock")
     suspend fun subscribeBackInStock(
         @Header("Authorization") bearerToken: String,
@@ -317,7 +334,6 @@ interface ApiService {
         @Path("productId") productId: String
     ): Response<BackInStockResponse>
 
-    // ── FARMER QUESTIONS ──
     @GET("api/farmer/questions")
     suspend fun getFarmerQuestions(
         @Header("Authorization") bearerToken: String
@@ -330,7 +346,6 @@ interface ApiService {
         @Body body: AnswerQuestionRequest
     ): Response<AnswerQuestionResponse>
 
-    // ── LOYALTY / REFERRALS ──
     @GET("api/loyalty/me")
     suspend fun getLoyaltyMe(
         @Header("Authorization") bearerToken: String
@@ -347,7 +362,6 @@ interface ApiService {
         @Header("Authorization") bearerToken: String
     ): Response<ReferralsMeResponse>
 
-    // ── HELP ──
     @GET("api/help/articles")
     suspend fun getHelpArticles(
         @Query("audience") audience: String
@@ -367,14 +381,12 @@ interface ApiService {
         @Body body: SendSupportMessageRequest
     ): Response<SendSupportMessageResponse>
 
-    // ── SEASONAL ──
     @GET("api/seasonal")
     suspend fun getSeasonal(
         @Query("month") month: Int,
         @Query("region") region: String
     ): Response<SeasonalResponse>
 
-    // ── PRODUCT REQUESTS ──
     @POST("api/requests")
     suspend fun createRequest(
         @Header("Authorization") bearerToken: String,
@@ -409,7 +421,6 @@ interface ApiService {
         @Path("id") id: String
     ): Response<ProductRequestResponse>
 
-    // ── FAVORITES ──
     @GET("api/favorites")
     suspend fun getFavorites(
         @Header("Authorization") bearerToken: String
@@ -433,13 +444,11 @@ interface ApiService {
         @Path("productId") productId: String
     ): Response<FavoriteStatusResponse>
 
-    // ── HOME BANNER ──
     @GET("api/home-banner")
     suspend fun getHomeBanner(
         @Header("Authorization") bearerToken: String
     ): Response<HomeBannerResponse>
 
-    // ── FARMER VERIFICATION ──
     @Multipart
     @POST("api/verification/submit")
     suspend fun submitVerification(
@@ -458,7 +467,6 @@ interface ApiService {
         @Header("Authorization") bearerToken: String
     ): Response<VerificationStatusResponse>
 
-    // ── FARMER WALLET ──
     @GET("api/farmer/wallet")
     suspend fun getWallet(
         @Header("Authorization") bearerToken: String
@@ -467,10 +475,21 @@ interface ApiService {
     @POST("api/farmer/withdraw")
     suspend fun requestWithdrawal(
         @Header("Authorization") bearerToken: String,
-        @Body request: WithdrawRequest
+        @Body request: WithdrawRequestDto
     ): Response<WithdrawResponse>
 
-    // ── DRIVER ──
+    @Multipart
+    @POST("api/farmer/verification/butcher")
+    suspend fun uploadButcherCertificate(
+        @Header("Authorization") bearerToken: String,
+        @Part certificate: MultipartBody.Part
+    ): Response<Map<String, String>>
+
+    @GET("api/farmer/verification/butcher")
+    suspend fun getButcherStatus(
+        @Header("Authorization") bearerToken: String
+    ): Response<Map<String, Boolean>>
+
     @GET("api/driver/jobs")
     suspend fun getDriverJobs(
         @Header("Authorization") bearerToken: String
@@ -529,7 +548,6 @@ interface ApiService {
         @Header("Authorization") bearerToken: String
     ): Response<BatchDto>
 
-    // ── Driver batch lifecycle ──
     @POST("api/driver/batch/start")
     suspend fun startDriverBatch(
         @Header("Authorization") bearerToken: String
@@ -554,8 +572,14 @@ interface ApiService {
     @POST("api/driver/withdraw")
     suspend fun requestDriverWithdrawal(
         @Header("Authorization") bearerToken: String,
-        @Body request: DriverWithdrawRequest
+        @Body request: WithdrawRequestDto
     ): Response<DriverWithdrawResponse>
+
+    @PATCH("api/driver/vehicle")
+    suspend fun updateDriverVehicle(
+        @Header("Authorization") bearerToken: String,
+        @Body body: VehicleUpdateRequest
+    ): Response<VehicleUpdateResponse>
 
     @Multipart
     @POST("api/driver/verification/submit")
@@ -598,6 +622,33 @@ data class UpdateProductRequest(
     val stock: Int? = null,
     val imageUrl: String? = null
 )
+
+data class RequestQuoteRequest(val quantity: Int)
+data class ReplyQuoteRequest(val price: Double, val date: String, val note: String?)
+
+data class BulkQuoteDto(
+    val id: String,
+    val quantity: Int,
+    val buyerName: String,
+    val buyerEmail: String,
+    val status: String,
+    val farmerReplyPrice: Double?,
+    val farmerReplyDate: String?,
+    val farmerNote: String?,
+    val product: BulkQuoteProductDto
+)
+
+data class BulkQuoteProductDto(
+    val id: String,
+    val name: String,
+    val unit: String,
+    val packSize: String?,
+    val imageUrl: String?,
+    val price: Double,
+    val farmerEmail: String? = null
+)
+
+data class FarmerQuotesResponse(val quotes: List<BulkQuoteDto>)
 
 data class CartValidateItem(
     val productId: String,
@@ -728,4 +779,28 @@ data class BackInStockResponse(
     val subscribed: Boolean = false,
     val productId: String? = null,
     val message: String? = null
+)
+
+data class BusinessDashboardDto(
+    val revenueThisWeek: Double = 0.0,
+    val platformFee: Double = 0.0,
+    val netProfit: Double = 0.0,
+    val weeklyOrderCount: Int = 0,
+    val avgOrderValue: Double = 0.0,
+
+    val totalRevenue: Double = 0.0,
+    val totalPlatformFee: Double = 0.0,
+    val totalNetProfit: Double = 0.0,
+    val totalOrders: Int = 0,
+    val totalAvgOrderValue: Double = 0.0,
+
+    val pendingPayout: Double = 0.0,
+    val fundingReadiness: Int = 0,
+    val topProducts: List<TopProductDto> = emptyList(),
+    val last7DaysChart: List<Int> = emptyList()
+)
+
+data class TopProductDto(
+    val name: String = "",
+    val qty: Int = 0
 )

@@ -26,6 +26,12 @@ object ProductsRepository {
         name: String,
         price: Double,
         stock: Int?,
+        unit: String? = null,
+        packSize: String? = null,
+        bulkMin1: Int? = null,
+        bulkPrice1: Double? = null,
+        bulkMin2: Int? = null,
+        bulkPrice2: Double? = null,
         imageUrl: String? = null
     ): ApiResult<Product> {
         val token = TokenStore.token ?: return ApiResult.Error("Please sign in again.")
@@ -36,6 +42,12 @@ object ProductsRepository {
                     name = name,
                     price = price,
                     stock = stock,
+                    unit = unit,
+                    packSize = packSize,
+                    bulkMinQty1 = bulkMin1,
+                    bulkPrice1 = bulkPrice1,
+                    bulkMinQty2 = bulkMin2,
+                    bulkPrice2 = bulkPrice2,
                     imageUrl = imageUrl
                 )
             )
@@ -47,6 +59,23 @@ object ProductsRepository {
         } catch (e: Exception) {
             ApiResult.Error("Couldn't reach the server. Check your connection.")
         }
+    }
+
+    suspend fun requestBulkQuote(productId: String, quantity: Int): ApiResult<Unit> {
+        val token = TokenStore.token ?: return ApiResult.Error("Please sign in.")
+        return try {
+            val res = api.requestBulkQuote("Bearer $token", productId, RequestQuoteRequest(quantity))
+            if (res.isSuccessful) ApiResult.Success(Unit) else ApiResult.Error("Failed to request quote")
+        } catch (e: Exception) { ApiResult.Error("Network error") }
+    }
+
+    suspend fun fetchMyQuotes(): ApiResult<List<BulkQuoteDto>> {
+        val token = TokenStore.token ?: return ApiResult.Error("Please sign in.")
+        return try {
+            val res = api.getMyBulkQuotes("Bearer $token")
+            if (res.isSuccessful && res.body() != null) ApiResult.Success(res.body()!!.quotes)
+            else ApiResult.Error("Could not load quotes")
+        } catch (e: Exception) { ApiResult.Error("Network error") }
     }
 
     suspend fun fetchMyProducts(): ApiResult<List<Product>> {
@@ -145,16 +174,6 @@ object ProductsRepository {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // Cart validation
-    //
-    // Called when the buyer opens the cart screen. Returns a list of
-    // items that are no longer valid — product deleted, hidden by
-    // admin, out of stock, or insufficient stock — so the client can
-    // prune them from the local cart before the buyer reaches checkout.
-    //
-    // No auth token needed: guest carts must be able to validate too.
-    // ─────────────────────────────────────────────────────────────
     suspend fun validateCart(items: List<CartValidateItem>): ApiResult<CartValidateResponse> {
         return try {
             val response = api.validateCart(CartValidateRequest(items = items))
@@ -185,9 +204,6 @@ object ProductsRepository {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // Map the network DTO into the local Product model.
-    // ─────────────────────────────────────────────────────────────
     private fun mapToProduct(dto: ProductDto): Product {
         return Product(
             id = dto.id,
@@ -198,10 +214,16 @@ object ProductsRepository {
             fromFarmerBadge = true,
             lowStock = dto.stock != null && dto.stock in 1..2,
             stock = dto.stock,
+            unit = dto.unit ?: "item",
+            packSize = dto.packSize,
             imageUrl = dto.imageUrl,
             farmerEmail = dto.farmerEmail,
             averageRating = dto.averageRating ?: 0.0,
             reviewCount = dto.reviewCount ?: 0,
+            bulkMinQty1 = dto.bulkMinQty1,
+            bulkPrice1 = dto.bulkPrice1,
+            bulkMinQty2 = dto.bulkMinQty2,
+            bulkPrice2 = dto.bulkPrice2
         )
     }
 

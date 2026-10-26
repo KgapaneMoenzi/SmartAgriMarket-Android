@@ -37,16 +37,22 @@
             </intent-filter>
         </activity>
 
-        <!--
-            WorkManager's SystemForegroundService. Needed on Android 14+
-            if the worker needs to be promoted to foreground while running.
-            tools:node="merge" tells the manifest merger to combine this
-            with the declaration that WorkManager injects automatically.
-        -->
+        <!-- WorkManager's SystemForegroundService. -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
+
+        <!-- REQUIRED FOR PDF EXPORT: FileProvider -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 </manifest>

@@ -211,6 +211,45 @@ fun FarmerOrdersScreen(
     }
 }
 
+// ── NEW: Added the missing OrderRow component ──
+@Composable
+fun OrderRow(order: FarmerOrder, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = AgriCardBg)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(order.buyerName, fontWeight = FontWeight.Bold, color = AgriTextPrimary)
+                Text("R${"%.2f".format(order.total)}", fontWeight = FontWeight.Bold, color = AgriGreenDark)
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("Order #${order.trackingId}", fontSize = 12.sp, color = AgriTextSecondary)
+            Spacer(Modifier.height(12.dp))
+
+            val statusColor = when (order.status) {
+                "confirmed" -> AgriGreenDark
+                "pending_payment" -> AgriOrange
+                else -> AgriTextSecondary
+            }
+
+            Box(
+                modifier = Modifier
+                    .background(statusColor.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = order.status.replace("_", " ").uppercase(),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = statusColor
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun EmptyState(emoji: String, title: String, hint: String) {
     Column(

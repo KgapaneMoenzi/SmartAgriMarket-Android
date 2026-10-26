@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,6 +53,7 @@ fun HomeScreen(
     onCartClick: () -> Unit = {},
     onNotificationsClick: () -> Unit = {},
     onRecommendationClick: (RecommendedProductDto) -> Unit = {},
+    onSmartBasketClick: () -> Unit = {},
     bottomBar: @Composable () -> Unit = {}
 ) {
     var selectedCategory by remember { mutableStateOf(ProductCategory.ALL) }
@@ -80,121 +82,140 @@ fun HomeScreen(
         containerColor = AgriCreamBg,
         bottomBar = bottomBar
     ) { padding ->
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // ── Greeting header ──
-            item(span = { GridItemSpan(2) }) {
-                StoreGreetingHeader(
-                    firstName = if (isLoggedIn) buyerFirstName else "Guest",
-                    unreadCount = unreadNotificationCount,
-                    cartCount = cartItemCount,
-                    onCartClick = onCartClick,
-                    onNotificationsClick = onNotificationsClick
-                )
-            }
 
-            // ── Search bar ──
-            item(span = { GridItemSpan(2) }) {
-                StoreSearchBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it }
-                )
-            }
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
 
-            // ── Categories ──
-            if (!isSearching) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // ── Greeting header ──
                 item(span = { GridItemSpan(2) }) {
-                    Column {
-                        Text(
-                            "Categories",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = AgriTextPrimary,
-                            modifier = Modifier.padding(bottom = 10.dp)
-                        )
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            lazyRowItems(ProductCategory.values().toList()) { category ->
-                                CategoryChip(
-                                    label = category.label,
-                                    isSelected = category == selectedCategory,
-                                    onClick = { selectedCategory = category }
-                                )
+                    StoreGreetingHeader(
+                        firstName = if (isLoggedIn) buyerFirstName else "Guest",
+                        unreadCount = unreadNotificationCount,
+                        cartCount = cartItemCount,
+                        onCartClick = onCartClick,
+                        onNotificationsClick = onNotificationsClick
+                    )
+                }
+
+                // ── Search bar ──
+                item(span = { GridItemSpan(2) }) {
+                    StoreSearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it }
+                    )
+                }
+
+                // ── Categories ──
+                if (!isSearching) {
+                    item(span = { GridItemSpan(2) }) {
+                        Column {
+                            Text(
+                                "Categories",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = AgriTextPrimary,
+                                modifier = Modifier.padding(bottom = 10.dp)
+                            )
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                // This automatically pulls ALL categories including the new MEAT & POULTRY ones
+                                lazyRowItems(ProductCategory.values().toList()) { category ->
+                                    CategoryChip(
+                                        label = category.label,
+                                        isSelected = category == selectedCategory,
+                                        onClick = { selectedCategory = category }
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                // ── Promo banner ──
-                item(span = { GridItemSpan(2) }) {
-                    StorePromoBanner()
-                }
-            }
-
-            // ── Section heading ──
-            item(span = { GridItemSpan(2) }) {
-                Text(
-                    text = if (isSearching) {
-                        if (filteredProducts.isEmpty()) "No results for \"$trimmedQuery\""
-                        else "Results for \"$trimmedQuery\" (${filteredProducts.size})"
-                    } else "Fresh Products",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = AgriTextPrimary
-                )
-            }
-
-            // ── Product grid ──
-            if (filteredProducts.isEmpty()) {
-                item(span = { GridItemSpan(2) }) {
-                    EmptyProductsState(
-                        query = trimmedQuery,
-                        onClearSearch = { searchQuery = "" }
-                    )
-                }
-            } else {
-                items(filteredProducts, key = { it.id }) { product ->
-                    val qty = cartQuantityFor(product.id)
-                    StoreProductCard(
-                        product = product,
-                        cartQuantity = qty,
-                        onClick = { onProductClick(product) },
-                        onIncrement = { onAddToCart(product) },
-                        onDecrement = { onRemoveFromCart(product) }
-                    )
-                }
-            }
-
-            // ── Recommended carousel ──
-            if (!isSearching) {
-                item(span = { GridItemSpan(2) }) {
-                    RecommendedCarousel(
-                        onProductClick = { rec ->
-                            val matching = products.find { it.id == rec.id }
-                            if (matching != null) onProductClick(matching)
-                            else onRecommendationClick(rec)
-                        }
-                    )
-                }
-
-                if (newListings.isNotEmpty()) {
+                    // ── Smart Basket Promo banner ──
                     item(span = { GridItemSpan(2) }) {
-                        NewListingsSection(products = newListings)
+                        SmartBasketPromoBanner(onClick = onSmartBasketClick)
                     }
                 }
 
+                // ── Section heading ──
                 item(span = { GridItemSpan(2) }) {
-                    SeasonalTipCard()
+                    Text(
+                        text = if (isSearching) {
+                            if (filteredProducts.isEmpty()) "No results for \"$trimmedQuery\""
+                            else "Results for \"$trimmedQuery\" (${filteredProducts.size})"
+                        } else "Fresh Products",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = AgriTextPrimary
+                    )
                 }
+
+                // ── Product grid ──
+                if (filteredProducts.isEmpty()) {
+                    item(span = { GridItemSpan(2) }) {
+                        EmptyProductsState(
+                            query = trimmedQuery,
+                            onClearSearch = { searchQuery = "" }
+                        )
+                    }
+                } else {
+                    items(filteredProducts, key = { it.id }) { product ->
+                        val qty = cartQuantityFor(product.id)
+                        StoreProductCard(
+                            product = product,
+                            cartQuantity = qty,
+                            onClick = { onProductClick(product) },
+                            onIncrement = { onAddToCart(product) },
+                            onDecrement = { onRemoveFromCart(product) }
+                        )
+                    }
+                }
+
+                // ── Recommended carousel ──
+                if (!isSearching) {
+                    item(span = { GridItemSpan(2) }) {
+                        RecommendedCarousel(
+                            onProductClick = { rec ->
+                                val matching = products.find { it.id == rec.id }
+                                if (matching != null) onProductClick(matching)
+                                else onRecommendationClick(rec)
+                            }
+                        )
+                    }
+
+                    if (newListings.isNotEmpty()) {
+                        item(span = { GridItemSpan(2) }) {
+                            NewListingsSection(products = newListings)
+                        }
+                    }
+
+                    item(span = { GridItemSpan(2) }) {
+                        SeasonalTipCard()
+                    }
+                }
+
+                item(span = { GridItemSpan(2) }) { Spacer(Modifier.height(80.dp)) }
             }
 
-            item(span = { GridItemSpan(2) }) { Spacer(Modifier.height(8.dp)) }
+            // ── Floating Smart Basket (Flower) Icon ──
+            if (!isSearching) {
+                FloatingActionButton(
+                    onClick = onSmartBasketClick,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 20.dp, bottom = 20.dp)
+                        .shadow(8.dp, CircleShape),
+                    containerColor = AgriGreen,
+                    contentColor = Color.White,
+                    shape = CircleShape
+                ) {
+                    Text("🌸", fontSize = 28.sp)
+                }
+            }
         }
     }
 }
@@ -363,41 +384,53 @@ private fun CategoryChip(label: String, isSelected: Boolean, onClick: () -> Unit
 }
 
 // ─────────────────────────────────────────────────────────────
-// Promo banner
+// Smart Basket Promo banner
 // ─────────────────────────────────────────────────────────────
 @Composable
-private fun StorePromoBanner() {
+private fun SmartBasketPromoBanner(onClick: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = AgriMintLight),
+        colors = CardDefaults.cardColors(containerColor = AgriMintSoft),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "Fresh Products from the Farmer",
-                    style = MaterialTheme.typography.titleMedium,
+                    "Smart Basket ✨",
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = AgriGreenDark
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    "Handpicked, locally grown, delivered to your door.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AgriGreenDark.copy(alpha = 0.75f)
+                    "Set a budget. We build the basket.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AgriGreenDark.copy(alpha = 0.8f)
                 )
             }
-            Text("🧺", fontSize = 68.sp)
+            Button(
+                onClick = onClick,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AgriGreen,
+                    contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Build", fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────
-// Product card — real ratings, no clock
+// Product card
 // ─────────────────────────────────────────────────────────────
 @Composable
 private fun StoreProductCard(
@@ -467,7 +500,7 @@ private fun StoreProductCard(
 
                 Spacer(Modifier.height(6.dp))
 
-                // ── Real ratings only (clock removed) ──
+                // ── Real ratings only ──
                 if (product.reviewCount > 0) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(

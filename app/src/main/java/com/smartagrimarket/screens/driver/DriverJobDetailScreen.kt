@@ -67,12 +67,17 @@ private fun pickupSectionLabel(pickups: List<PickupStopDto>): String = when {
 }
 
 /**
+ * Checks the raw item maps to see if any of them require cold chain.
+ * Because the API sends items as generic Maps, we check the boolean key.
+ */
+private fun hasColdChainItems(items: List<Map<String, Any?>>): Boolean {
+    return items.any { it["requiresColdChain"] == true }
+}
+
+/**
  * Launches the system maps app pointed at either:
  *   1. Precise coordinates when available — `geo:lat,lng?q=lat,lng(label)`
  *   2. A text address as a fallback — `geo:0,0?q=<address>`
- *
- * Coordinates always win when present because they're unambiguous —
- * the driver's map app drops the pin exactly where the buyer placed it.
  */
 private fun openNavigationTo(
     context: android.content.Context,
@@ -177,6 +182,9 @@ fun DriverJobDetailScreen(
     }
 
     val isHubMode = current.pickupMode == "HUB" || pickups.any { pickupIsHub(it) }
+
+    // COLD CHAIN CHECK
+    val requiresColdChain = remember(current) { hasColdChainItems(current.items) }
 
     val unpackedCount = pickups.count { !it.hasPacked }
     val allPacked = pickups.isNotEmpty() && unpackedCount == 0
@@ -367,6 +375,35 @@ fun DriverJobDetailScreen(
                                     "Waiting for GPS signal…",
                                     color = AgriTextSecondary,
                                     fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
+
+                    // ── COLD CHAIN BANNER ──
+                    if (requiresColdChain) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFFE3F2FD)) // Light blue
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("🧊", fontSize = 20.sp)
+                            Spacer(Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    "Cold-Chain Required",
+                                    color = Color(0xFF1565C0),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "This order contains meat/poultry. Ensure it goes straight into your canopy fridge.",
+                                    color = Color(0xFF1565C0),
+                                    fontSize = 12.sp
                                 )
                             }
                         }
@@ -680,11 +717,19 @@ fun DriverJobDetailScreen(
                         current.items.forEach { item ->
                             val name = item["name"] as? String ?: "Item"
                             val qty = (item["quantity"] as? Number)?.toInt() ?: 1
+                            val isColdChain = item["requiresColdChain"] == true
+
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(name, style = MaterialTheme.typography.bodySmall, color = AgriTextPrimary)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (isColdChain) {
+                                        Text("🧊 ", fontSize = 12.sp)
+                                    }
+                                    Text(name, style = MaterialTheme.typography.bodySmall, color = AgriTextPrimary)
+                                }
                                 Text("× $qty", style = MaterialTheme.typography.bodySmall, color = AgriTextSecondary)
                             }
                         }

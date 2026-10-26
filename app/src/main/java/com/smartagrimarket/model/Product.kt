@@ -9,20 +9,27 @@ data class Product(
     val fromFarmerBadge: Boolean = false,
     val lowStock: Boolean = false,
     val stock: Int? = null,
+    val unit: String = "item",
+    val packSize: String? = null,
     val imageUrl: String? = null,
     val farmerEmail: String? = null,
-    // ── Rating aggregates (from real reviews) ──
-    // Populated by the backend on every product DTO.
-    // 0.0 / 0 means the product has no reviews yet.
     val averageRating: Double = 0.0,
     val reviewCount: Int = 0,
+
+    // BULK FIELDS
+    val bulkMinQty1: Int? = null,
+    val bulkPrice1: Double? = null,
+    val bulkMinQty2: Int? = null,
+    val bulkPrice2: Double? = null,
 )
 
 enum class ProductCategory(val label: String) {
     ALL("All"),
     VEGETABLES("Vegetables"),
     FRUITS("Fruits"),
-    DAIRY("Dairy")
+    DAIRY("Dairy"),
+    MEAT("Meat & Livestock"),
+    POULTRY("Poultry & Eggs")
 }
 
 data class HomeBanner(

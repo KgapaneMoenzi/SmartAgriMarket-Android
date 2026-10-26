@@ -84,4 +84,6 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("androidx.core:core-ktx:1.12.0")
+    // QR Code Generator
+    implementation("com.google.zxing:core:3.5.2")
 }

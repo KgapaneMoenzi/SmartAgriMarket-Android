@@ -115,6 +115,11 @@ data class BatchStopDto(
     val items: List<Map<String, Any?>> = emptyList(),
     val payout: Double = 0.0,
 
+    // ── COLD-CHAIN ──
+    // True if any item in this order needs to be carried in the
+    // driver's canopy fridge. The UI shows a 🧊 badge when true.
+    val requiresColdChain: Boolean = false,
+
     val assignedAt: String? = null,
     val acceptedAt: String? = null,
     val pickedUpAt: String? = null,
@@ -139,6 +144,12 @@ data class DriverJobsResponse(
     val preferredZones: List<String> = emptyList(),
     val batchSize: Int = 0,
     val maxBatch: Int = 10,
+
+    // ── COLD-CHAIN (CANOPY FRIDGE) ──
+    val hasFridge: Boolean = false,
+    val vehicleType: String? = null,
+    val vehiclePlate: String? = null,
+
     val hub: HubDto? = null,
 )
 
@@ -158,6 +169,9 @@ data class DriverStatsDto(
     val verificationStatus: String = "not_submitted",
     val batchState: String = "idle",
     val maxBatch: Int = 10,
+
+    // ── COLD-CHAIN (CANOPY FRIDGE) ──
+    val hasFridge: Boolean = false,
 )
 
 data class DriverAvailabilityRequest(val isAvailable: Boolean)
@@ -187,6 +201,7 @@ data class BatchActiveOrderDto(
     val trackingId: String? = null,
     val zone: String? = null,
     val distanceFromHubKm: Double? = null,
+    val requiresColdChain: Boolean = false,   // ── COLD-CHAIN ──
 )
 
 data class BatchDto(
@@ -219,6 +234,11 @@ data class DriverVerificationDto(
 data class DriverVerificationMeResponse(
     val status: String = "not_submitted",
     val verification: DriverVerificationDto? = null,
+
+    // ── COLD-CHAIN (CANOPY FRIDGE) ──
+    val hasFridge: Boolean = false,
+    val vehicleType: String? = null,
+    val vehiclePlate: String? = null,
 )
 
 data class DriverVerificationSubmitResponse(
@@ -245,7 +265,27 @@ data class DriverWithdrawalDto(
     val rejectionReason: String? = null,
     val processedAt: String? = null,
     val createdAt: String = "",
+
+    // ── PAYOUT DETAILS ──
+    val payoutMethod: String? = null,    // "EWALLET" | "BANK"
+    val walletNumber: String? = null,
+    val bankName: String? = null,
+    val accountNumber: String? = null,
+    val accountName: String? = null,
 )
 
-data class DriverWithdrawRequest(val amount: Double)
 data class DriverWithdrawResponse(val withdrawal: DriverWithdrawalDto)
+
+// ── COLD-CHAIN (CANOPY FRIDGE) ──
+
+data class VehicleUpdateRequest(
+    val hasFridge: Boolean? = null,
+    val vehicleType: String? = null,
+    val vehiclePlate: String? = null,
+)
+
+data class VehicleUpdateResponse(
+    val hasFridge: Boolean = false,
+    val vehicleType: String? = null,
+    val vehiclePlate: String? = null,
+)

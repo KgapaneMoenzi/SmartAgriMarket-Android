@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.core.net.toUri
 import com.smartagrimarket.model.CartState
 import com.smartagrimarket.model.Product
 import com.smartagrimarket.model.ProductCategory
@@ -33,6 +34,7 @@ import com.smartagrimarket.model.network.VerificationRepository
 import com.smartagrimarket.screens.AboutSupportScreen
 import com.smartagrimarket.screens.AccountSettingsScreen
 import com.smartagrimarket.screens.BackInStockScreen
+import com.smartagrimarket.screens.BuyerQuotesScreen
 import com.smartagrimarket.screens.BuyerTab
 import com.smartagrimarket.screens.CartScreen
 import com.smartagrimarket.screens.CheckoutScreen
@@ -52,6 +54,7 @@ import com.smartagrimarket.screens.RequestProductScreen
 import com.smartagrimarket.screens.ReviewsScreen
 import com.smartagrimarket.screens.SeasonalCalendarScreen
 import com.smartagrimarket.screens.SmartAgriMarketBottomNav
+import com.smartagrimarket.screens.SmartBasketScreen
 import com.smartagrimarket.screens.account.ChangePasswordScreen
 import com.smartagrimarket.screens.account.ComingSoonScreen
 import com.smartagrimarket.screens.account.DeliveryAddressScreen
@@ -69,13 +72,14 @@ import com.smartagrimarket.screens.driver.DriverTab
 import com.smartagrimarket.screens.driver.DriverVerificationScreen
 import com.smartagrimarket.screens.driver.DriverWalletScreen
 import com.smartagrimarket.screens.farmer.FarmerBottomNav
+import com.smartagrimarket.screens.farmer.FarmerBusinessScreen
 import com.smartagrimarket.screens.farmer.FarmerDashboardScreen
 import com.smartagrimarket.screens.farmer.FarmerMyProductsScreen
 import com.smartagrimarket.screens.farmer.FarmerOrderDetailScreen
 import com.smartagrimarket.screens.farmer.FarmerOrdersScreen
 import com.smartagrimarket.screens.farmer.FarmerQuestionsScreen
+import com.smartagrimarket.screens.farmer.FarmerQuotesScreen
 import com.smartagrimarket.screens.farmer.FarmerRequestsScreen
-import com.smartagrimarket.screens.farmer.FarmerStatsScreen
 import com.smartagrimarket.screens.farmer.FarmerTab
 import com.smartagrimarket.screens.farmer.FarmerVerificationScreen
 import com.smartagrimarket.screens.farmer.FarmerWalletScreen
@@ -88,7 +92,7 @@ private const val BASE_URL = "https://smartagrimarket-backend.onrender.com"
 
 private fun openUrl(context: Context, url: String) {
     try {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        val intent = Intent(Intent.ACTION_VIEW, url.toUri()).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
@@ -123,6 +127,7 @@ private sealed class BuyerScreen {
     data object Notifications : BuyerScreen()
     data object Checkout : BuyerScreen()
     data object OrderConfirmation : BuyerScreen()
+    data object Quotes : BuyerScreen() // <-- NEW ROUTE ADDED
     data class PayfastWebView(val paymentUrl: String, val fields: Map<String, String>) : BuyerScreen()
     data class ProductDetail(val product: Product) : BuyerScreen()
     data class Reviews(val product: Product) : BuyerScreen()
@@ -131,6 +136,7 @@ private sealed class BuyerScreen {
     data object SeasonalCalendar : BuyerScreen()
     data class DeliverySlotPick(val order: OrderDto) : BuyerScreen()
     data class Tracking(val order: OrderDto) : BuyerScreen()
+    data class SmartBasket(val products: List<Product>) : BuyerScreen()
 }
 
 private sealed class FarmerScreen {
@@ -138,9 +144,9 @@ private sealed class FarmerScreen {
     data class OrderDetail(val order: com.smartagrimarket.model.FarmerOrder) : FarmerScreen()
     data object UploadProduct : FarmerScreen()
     data object MyProducts : FarmerScreen()
+    data object Quotes : FarmerScreen()
 }
 
-// Driver no longer has a JobDetail sub-screen — batch queue is inline.
 private sealed class DriverScreen {
     data object Tabs : DriverScreen()
     data object Verification : DriverScreen()
@@ -335,7 +341,7 @@ fun AppRoot() {
                             )
                         }
                         var products by remember { mutableStateOf<List<Product>>(emptyList()) }
-                        var unreadNotificationCount by remember { mutableStateOf(0) }
+                        var unreadNotificationCount by remember { mutableIntStateOf(0) }
 
                         val buyerCanGoBack = buyerScreen !is BuyerScreen.Tabs ||
                                 (selectedTab == BuyerTab.ACCOUNT && accountSubScreen != AccountSubScreen.Main) ||
@@ -346,6 +352,7 @@ fun AppRoot() {
                                 showAddressPicker -> showAddressPicker = false
                                 buyerScreen !is BuyerScreen.Tabs -> {
                                     buyerScreen = when (val bs = buyerScreen) {
+                                        is BuyerScreen.SmartBasket -> BuyerScreen.Tabs
                                         is BuyerScreen.ProductDetail -> BuyerScreen.Tabs
                                         is BuyerScreen.Reviews -> BuyerScreen.ProductDetail(bs.product)
                                         is BuyerScreen.QA -> BuyerScreen.ProductDetail(bs.product)
@@ -357,6 +364,7 @@ fun AppRoot() {
                                         BuyerScreen.SeasonalCalendar -> BuyerScreen.Tabs
                                         is BuyerScreen.DeliverySlotPick -> BuyerScreen.Tabs
                                         is BuyerScreen.Tracking -> BuyerScreen.Tabs
+                                        BuyerScreen.Quotes -> BuyerScreen.Tabs // <-- ADDED
                                         BuyerScreen.Tabs -> BuyerScreen.Tabs
                                     }
                                 }
@@ -369,7 +377,7 @@ fun AppRoot() {
                             }
                         }
 
-                        fun tryAddToCart(product: Product) {
+                        fun tryAddToCart(product: Product, quantity: Int = 1) {
                             if (isGuest) {
                                 screen = AppScreen.SignIn
                                 return
@@ -385,7 +393,12 @@ fun AppRoot() {
                                             "Only $stock available."
                                 }
                             } else {
-                                cart.add(product)
+                                val allowed = if (stock != null) minOf(quantity, stock - inCart) else quantity
+                                repeat(allowed) { cart.add(product) }
+                                if (allowed < quantity) {
+                                    stockLimitMessage = "Only $stock ${product.name} available, " +
+                                            "so $allowed were added to your cart."
+                                }
                             }
                         }
 
@@ -428,6 +441,17 @@ fun AppRoot() {
                         }
 
                         when (val bs = buyerScreen) {
+                            is BuyerScreen.SmartBasket -> {
+                                SmartBasketScreen(
+                                    products = bs.products,
+                                    onAddToCart = { product, quantity -> tryAddToCart(product, quantity) },
+                                    onClose = {
+                                        buyerScreen = BuyerScreen.Tabs
+                                        selectedTab = BuyerTab.CART
+                                    }
+                                )
+                            }
+
                             BuyerScreen.Notifications -> {
                                 NotificationsScreen(
                                     onBack = { buyerScreen = BuyerScreen.Tabs },
@@ -462,7 +486,29 @@ fun AppRoot() {
                                                     }
                                                 }
                                             }
+                                            "quote" -> { // <-- NEW
+                                                buyerScreen = BuyerScreen.Quotes
+                                            }
                                         }
+                                    }
+                                )
+                            }
+
+                            BuyerScreen.Quotes -> { // <-- NEW ROUTE ADDED
+                                BuyerQuotesScreen(
+                                    onBack = { buyerScreen = BuyerScreen.Tabs },
+                                    onCheckoutQuote = { product, quantity, finalPrice ->
+                                        cart.clear()
+                                        val bulkProduct = product.copy(price = finalPrice)
+                                        repeat(quantity) { cart.add(bulkProduct) }
+                                        buyerScreen = BuyerScreen.Checkout
+                                    },
+                                    bottomBar = {
+                                        SmartAgriMarketBottomNav(
+                                            selectedTab = selectedTab,
+                                            onTabSelected = { newTab -> selectedTab = newTab; buyerScreen = BuyerScreen.Tabs },
+                                            cartItemCount = cart.totalItems
+                                        )
                                     }
                                 )
                             }
@@ -554,6 +600,12 @@ fun AppRoot() {
                                     averageRating = bs.product.averageRating,
                                     reviewCount = bs.product.reviewCount,
                                     inStock = bs.product.stock == null || bs.product.stock > 0,
+                                    unit = bs.product.unit,
+                                    packSize = bs.product.packSize, // <-- ADDED PACK SIZE
+                                    bulkMinQty1 = bs.product.bulkMinQty1,
+                                    bulkPrice1 = bs.product.bulkPrice1,
+                                    bulkMinQty2 = bs.product.bulkMinQty2,
+                                    bulkPrice2 = bs.product.bulkPrice2,
                                     imageUrl = bs.product.imageUrl,
                                     stock = bs.product.stock,
                                     currentCartQuantity = cart.quantityOf(bs.product.id),
@@ -564,6 +616,16 @@ fun AppRoot() {
                                     },
                                     onBack = { buyerScreen = BuyerScreen.Tabs },
                                     onAddToCart = { tryAddToCart(bs.product) },
+                                    onRequestQuote = { qty ->
+                                        scope.launch {
+                                            val res = ProductsRepository.requestBulkQuote(bs.product.id, qty)
+                                            if (res is ApiResult.Success) {
+                                                errorMessage = "Quote requested successfully!"
+                                            } else if (res is ApiResult.Error) {
+                                                errorMessage = res.message
+                                            }
+                                        }
+                                    },
                                     onReviewsClick = { buyerScreen = BuyerScreen.Reviews(bs.product) },
                                     onQAClick = { buyerScreen = BuyerScreen.QA(bs.product) },
                                     onBackInStockClick = { buyerScreen = BuyerScreen.BackInStock(bs.product) },
@@ -863,7 +925,7 @@ fun AppRoot() {
                                                 var orders by remember { mutableStateOf<List<OrderDto>>(emptyList()) }
                                                 var isOrdersLoading by remember { mutableStateOf(true) }
                                                 var ordersError by remember { mutableStateOf<String?>(null) }
-                                                var reloadKey by remember { mutableStateOf(0) }
+                                                var reloadKey by remember { mutableIntStateOf(0) }
 
                                                 LaunchedEffect(reloadKey) {
                                                     isOrdersLoading = true
@@ -996,6 +1058,10 @@ fun AppRoot() {
                                             onRecommendationClick = { rec ->
                                                 buyerScreen = BuyerScreen.ProductDetail(recommendedToProduct(rec))
                                             },
+                                            onSmartBasketClick = {
+                                                if (isGuest) screen = AppScreen.SignIn
+                                                else buyerScreen = BuyerScreen.SmartBasket(products)
+                                            },
                                             bottomBar = bottomBar
                                         )
                                     }
@@ -1041,13 +1107,13 @@ fun AppRoot() {
                     }
 
                     UserRole.FARMER -> {
-                        var selectedTab by remember { mutableStateOf(FarmerTab.DASHBOARD) }
+                        var selectedTab by remember { mutableStateOf(FarmerTab.HOME) }
                         var farmerScreen by remember { mutableStateOf<FarmerScreen>(FarmerScreen.Tabs) }
                         var accountSubScreen by remember { mutableStateOf<AccountSubScreen>(AccountSubScreen.Main) }
                         var farmerNotificationsOpen by remember { mutableStateOf(false) }
                         var farmerQuestionsOpen by remember { mutableStateOf(false) }
                         var farmerRequestsOpen by remember { mutableStateOf(false) }
-                        var unreadRefreshKey by remember { mutableStateOf(0) }
+                        var unreadRefreshKey by remember { mutableIntStateOf(0) }
 
                         var verificationStatus by remember { mutableStateOf<String?>(null) }
                         var showVerificationScreen by remember { mutableStateOf(false) }
@@ -1065,7 +1131,7 @@ fun AppRoot() {
                                 farmerNotificationsOpen ||
                                 farmerScreen !is FarmerScreen.Tabs ||
                                 (selectedTab == FarmerTab.ACCOUNT && accountSubScreen != AccountSubScreen.Main) ||
-                                selectedTab != FarmerTab.DASHBOARD
+                                selectedTab != FarmerTab.HOME
 
                         BackHandler(enabled = farmerCanGoBack) {
                             when {
@@ -1086,7 +1152,7 @@ fun AppRoot() {
                                 selectedTab == FarmerTab.ACCOUNT && accountSubScreen != AccountSubScreen.Main -> {
                                     accountSubScreen = AccountSubScreen.Main
                                 }
-                                selectedTab != FarmerTab.DASHBOARD -> selectedTab = FarmerTab.DASHBOARD
+                                selectedTab != FarmerTab.HOME -> selectedTab = FarmerTab.HOME
                             }
                         }
 
@@ -1163,11 +1229,22 @@ fun AppRoot() {
                                         onBack = { farmerScreen = FarmerScreen.Tabs },
                                         isUploading = isLoading,
                                         errorMessage = errorMessage,
-                                        onUpload = { name, price, stock, imageUrl ->
+                                        onUpload = { name, price, stock, unit, packSize, imageUrl, bulkMin1, bulkPrice1, bulkMin2, bulkPrice2 ->
                                             errorMessage = null
                                             scope.launch {
                                                 isLoading = true
-                                                when (val result = ProductsRepository.createProduct(name, price, stock, imageUrl)) {
+                                                when (val result = ProductsRepository.createProduct(
+                                                    name = name,
+                                                    price = price,
+                                                    stock = stock,
+                                                    unit = unit,
+                                                    packSize = packSize, // <-- ADDED PACK SIZE
+                                                    bulkMin1 = bulkMin1,
+                                                    bulkPrice1 = bulkPrice1,
+                                                    bulkMin2 = bulkMin2,
+                                                    bulkPrice2 = bulkPrice2,
+                                                    imageUrl = imageUrl
+                                                )) {
                                                     is ApiResult.Success -> {
                                                         farmerScreen = FarmerScreen.MyProducts
                                                     }
@@ -1188,7 +1265,7 @@ fun AppRoot() {
 
                                 FarmerScreen.Tabs -> {
                                     when (selectedTab) {
-                                        FarmerTab.DASHBOARD -> {
+                                        FarmerTab.HOME -> {
                                             key(unreadRefreshKey) {
                                                 FarmerDashboardScreen(
                                                     onNotificationsClick = { farmerNotificationsOpen = true },
@@ -1203,6 +1280,7 @@ fun AppRoot() {
                                                     onMyProductsClick = { farmerScreen = FarmerScreen.MyProducts },
                                                     onSeeAllOrdersClick = { selectedTab = FarmerTab.ORDERS },
                                                     onSeeAllRequestsClick = { farmerRequestsOpen = true },
+                                                    onOpenQuotes = { farmerScreen = FarmerScreen.Quotes }, // <-- NEW
                                                     bottomBar = bottomBar
                                                 )
                                             }
@@ -1219,8 +1297,11 @@ fun AppRoot() {
                                             FarmerWeatherScreen(bottomBar = bottomBar)
                                         }
 
-                                        FarmerTab.STATS -> {
-                                            FarmerStatsScreen(bottomBar = bottomBar)
+                                        FarmerTab.BUSINESS -> {
+                                            FarmerBusinessScreen(
+                                                onBack = { selectedTab = FarmerTab.HOME },
+                                                bottomBar = bottomBar
+                                            )
                                         }
 
                                         FarmerTab.ACCOUNT -> {
@@ -1371,7 +1452,7 @@ fun AppRoot() {
                                                         role = UserRole.FARMER,
                                                         isDeactivatingAccount = isDeletingAccount,
                                                         deactivateAccountError = deleteAccountError,
-                                                        onBack = { selectedTab = FarmerTab.DASHBOARD },
+                                                        onBack = { selectedTab = FarmerTab.HOME },
                                                         onEditProfile = { accountSubScreen = AccountSubScreen.EditProfile },
                                                         onChangePassword = { accountSubScreen = AccountSubScreen.ChangePassword },
                                                         onOrderHistoryClick = { accountSubScreen = AccountSubScreen.OrderHistory },
@@ -1413,6 +1494,13 @@ fun AppRoot() {
                                         }
                                     }
                                 }
+
+                                FarmerScreen.Quotes -> {
+                                    FarmerQuotesScreen(
+                                        onBack = { farmerScreen = FarmerScreen.Tabs },
+                                        bottomBar = bottomBar
+                                    )
+                                }
                             }
                         }
                     }
@@ -1420,7 +1508,7 @@ fun AppRoot() {
                     UserRole.DRIVER -> {
                         var selectedTab by remember { mutableStateOf(DriverTab.HOME) }
                         var driverScreen by remember { mutableStateOf<DriverScreen>(DriverScreen.Tabs) }
-                        var activeJobCount by remember { mutableStateOf(0) }
+                        var activeJobCount by remember { mutableIntStateOf(0) }
 
                         val driverCanGoBack = driverScreen !is DriverScreen.Tabs ||
                                 selectedTab != DriverTab.HOME
@@ -1450,7 +1538,7 @@ fun AppRoot() {
                             }
                         }
 
-                        when (val ds = driverScreen) {
+                        when (driverScreen) {
                             DriverScreen.Verification -> {
                                 DriverVerificationScreen(
                                     onBack = { driverScreen = DriverScreen.Tabs },
